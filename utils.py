@@ -34,18 +34,17 @@ PROMPT_BR = """
                 Cada nota de rodapé deve conter o nome completo do arquivo a partir do qual a informação foi extraída. As seções 
                 relevantes e subseções devem ser citadas no formato de notas de rodapé, com o nome completo do arquivo a partir do qual a informação foi extraída. 
                 As referências devem ser numeradas sequencialmente e organizadas de forma clara e sistemática.
-                
+                - Caso a informação solicitada não esteja presente no contexto, utilize a seguinte resposta padrão:
+                    'Não foi possível encontrar a informação necessária no contexto fornecido para responder a esta pergunta.'
+            
             Estrutura para a execução do RAG:
 
-            Pergunta: {question}
-            Contexto: {context}
-            Resposta:
-
-            Observações adicionais: 
-            
-            - Caso a informação solicitada não esteja presente no contexto, utilize a seguinte resposta padrão:
-                'Não foi possível encontrar a informação necessária no contexto fornecido para responder a esta pergunta.'
-            
+            \n**Pergunta**: 
+            {question}
+            \n**Contexto**: 
+            {context}
+            \n**Resposta**:
+            \n**Referências**:
         
         """
 
@@ -63,14 +62,17 @@ PROMPT = """
             - Reference Formatting: At the end of each answer, include all references in the form of footnotes. 
             Each footnote must contain the complete name of the file from which the information was extracted, the relevant sections and subsections, and the specific pages consulted. 
             The references should be numbered sequentially and organized in a clear, systematic manner.
+            -In case the requested information is not present in the context, use the following default response:
+                'It was not possible to find the necessary information in the provided context to answer this question.'
+            
 
         Structure for RAG Execution:
 
-        Question: {question}
-        Context: {context}
-        Answer:
+        \n**Question**: 
+        {question}        
+        \n**Context**: 
+        {context}
+        \n**Resposta**:        
+        \n**Referências**:
 
-        Additional Note: In case the requested information is not present in the context, use the following default response:
-
-        'It was not possible to find the necessary information in the provided context to answer this question.'
     """

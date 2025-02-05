@@ -1,3 +1,6 @@
+from re import M
+import select
+from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_mistralai import MistralAIEmbeddings
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
@@ -57,7 +60,7 @@ def display_pdf_in_sidebar(pdf_path, file_name):
         
 def display_pdf_panel(file_name):
     pdf_viewer(file_name, 
-               height= 800, 
+               height= 750, 
                width=800, 
                resolution_boost=5,
                )
@@ -159,80 +162,10 @@ def parse_stream(stream):
                 replace('<think>', '\n:brain:\n\n:green[\\<pensando\\>]\n').
                 replace('</think>', '\n\n:green[\\</pensando\\>]\n\n---')
                 )
-        
 
-# ----------------------------------------------------------------------------------------------------------------------------
-# Streamlit app
-# ----------------------------------------------------------------------------------------------------------------------------
-st.set_page_config(page_icon="💬", 
-                   page_title="Chat...",
-                   layout= "centered"
-                   )
+def process_rag(selected_vector_db, embedding_option):
 
-with st.sidebar:
-    st.header("🧠 Exemplos de Aplicações de LLMs")    
-    st.markdown("""
-    ## Apresentação:
-                
-    - O app foi desenvolvido para fins didáticos...
-    - O app faz ...
-    - Os modelos disponíveis são...
-    """)
-    st.markdown("## Opções:")
-    backend_option = model_opts_backend()
-    model_option = model_opts_component(backend_option)
-    if st.button("Limpar Conversa", icon="🗑️"):
-        st.session_state.messages = []
-        
-    st.divider()
-
-tab_gpt_like, tab_chat_rag = st.tabs(["🤖 Clone GPT","🤖 :book: Chatbot com RAG"])
-
-st.session_state.display_pdf_sidebar = False
-
-# Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-with tab_gpt_like:
-    
-    # Create two columns with different ratios
-    col1, col2 = st.columns([9, 1])
-    
-    # Accept user input
-    prompt = st.chat_input("Olá! Como posso ajudar você hoje?")
-
-    with col1:
-        with st.container(height=500, border=False):
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
-                        
-            with st.spinner("Gerando resposta..."):
-                if prompt:
-                    # Display user message in chat message container
-                    with st.chat_message("user"):
-                        st.markdown(prompt)
-                    st.session_state.messages.append({"role": "user", "content": prompt})
-
-                    # Display assistant response in chat message container
-                    with st.chat_message("assistant"):
-
-                        stream = generate_response(prompt)
-                        response = st.write_stream(parse_stream(stream))
-                        
-                    
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-
-with tab_chat_rag:
-    embedding_option = model_opts_embedding()
-    # Dropdown to select vector DB or upload a new document
-    vector_db_options = [f.stem for f in Path(VECTOR_DB_FOLDER).glob("*.faiss")]
-    vector_db_options.append("Carregar Novo Documento")  # Add option to upload a new document
-    selected_vector_db = st.selectbox("Selecione a Base Vetorial ou Carregue Novo Documento", vector_db_options, index=0)
-    
-    check_display_pdf = st.checkbox("Mostrar PDF na barra lateral", value=False)
-    st.session_state.display_pdf_sidebar = check_display_pdf
+    vector_store = None
 
     # If 'Upload New Document' is selected, show the file uploader
     if selected_vector_db == "Carregar Novo Documento":
@@ -241,10 +174,9 @@ with tab_chat_rag:
 
         # Process the uploaded PDF
         if uploaded_file:
-            # st.sidebar.subheader("PDF Carregado")
-            # st.sidebar.write(uploaded_file.name)
-            st.success(f"PDF Carregado\n {uploaded_file.name}")
-
+            st.sidebar.subheader("PDF Carregado")
+            st.sidebar.write(uploaded_file.name)
+            
             # Save the PDF file temporarily and display it
             temp_path = f"temp_{uploaded_file.name}"
             document_binary = uploaded_file.read()
@@ -253,41 +185,43 @@ with tab_chat_rag:
 
             # Display PDF in the sidebar (show all pages)
             #display_pdf_in_sidebar(temp_path, uploaded_file.name.split('.')[0])
-            display_pdf_panel(document_binary)
+            #display_pdf_panel(document_binary)
+            
+            with st.sidebar:
 
-            # PDF processing button
-            if st.button("Processar o PDF e Armazenar na Base Vetorial"):
-                with st.spinner("Processando documento..."):
-                    # Convert PDF to markdown directly
-                    markdown_content = load_and_convert_document(temp_path)
-                    chunks = get_markdown_splits(markdown_content)
+                # PDF processing button
+                if st.button("Processar o PDF e Armazenar na Base Vetorial"):
+                    with st.spinner("Processando documento..."):
+                        # Convert PDF to markdown directly
+                        markdown_content = load_and_convert_document(temp_path)
+                        chunks = get_markdown_splits(markdown_content)
 
-                    # Initialize embeddings
-                    if embedding_option == EmbeddingType.MistralEmbeddings.name:
-                        embeddings = MistralAIEmbeddings(                    
-                            model=EmbeddingType.MistralEmbeddings.value
-                        )
-                    else:    
-                        embeddings = OllamaEmbeddings(
-                            model=EmbeddingType.OllamaEmbeddings.value, 
-                            base_url="http://localhost:11434")
+                        # Initialize embeddings
+                        if embedding_option == EmbeddingType.MistralEmbeddings.name:
+                            embeddings = MistralAIEmbeddings(                    
+                                model=EmbeddingType.MistralEmbeddings.value
+                            )
+                        else:    
+                            embeddings = OllamaEmbeddings(
+                                model=EmbeddingType.OllamaEmbeddings.value, 
+                                base_url="http://localhost:11434")
 
-                    # Create or load vector DB and store PDF along with it
-                    vector_store = create_or_load_vector_store(uploaded_file.name.split(".")[0], chunks, embeddings)
+                        # Create or load vector DB and store PDF along with it
+                        vector_store = create_or_load_vector_store(uploaded_file.name.split(".")[0], chunks, embeddings)
 
-                    # Ensure vector DB and PDF are stored correctly
-                    vector_db_path = Path(VECTOR_DB_FOLDER) / f"{uploaded_file.name.split('.')[0]}.faiss"
-                    vector_store.save_local(str(vector_db_path))  # Save FAISS vector store
+                        # Ensure vector DB and PDF are stored correctly
+                        vector_db_path = Path(VECTOR_DB_FOLDER) / f"{uploaded_file.name.split('.')[0]}.faiss"
+                        vector_store.save_local(str(vector_db_path))  # Save FAISS vector store
 
-                    # Store the PDF file alongside the vector DB
-                    pdf_path = Path(VECTOR_DB_FOLDER) / f"{uploaded_file.name}"
-                    with open(pdf_path, "wb") as f:
-                        f.write(document_binary)
+                        # Store the PDF file alongside the vector DB
+                        pdf_path = Path(VECTOR_DB_FOLDER) / f"{uploaded_file.name}"
+                        with open(pdf_path, "wb") as f:
+                            f.write(document_binary)
 
-                    st.success("PDF processado e armazenado no banco de dados vetorial.")
+                        st.success("PDF processado e armazenado no banco de dados vetorial.")
 
-                    # Clean up the temporary file
-                    Path(temp_path).unlink()
+                        # Clean up the temporary file
+                        Path(temp_path).unlink()
 
     elif selected_vector_db != "Carregar Novo Documento":
         # Load the selected vector DB
@@ -317,37 +251,135 @@ with tab_chat_rag:
                 st.sidebar.warning("Arquivo PDF não encontrado na Base Vetorial selecionada.")
         else:
             st.sidebar.warning(f"Base Vetorial '{selected_vector_db}' não encontrada.")
-
-    # Question input section
-    question = st.text_input("Entre sua pergunta:", placeholder="por exemplo, O que é o cartel em licitação de acordo com a  Lei de Concorrência?")
     
-    if "chat_history_rag" not in st.session_state:
-        st.session_state['chat_history_rag'] = []
+    return vector_store
+# ----------------------------------------------------------------------------------------------------------------------------
+# Streamlit app
+# ----------------------------------------------------------------------------------------------------------------------------
+
+
+#Session state variables
+st.session_state.display_pdf_sidebar = False
+st.session_state.display_pdf = False
+st.session_state.show_rag_opts = False 
+st.session_state.selected_vector_db = None
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "messages_rag" not in st.session_state:
+    st.session_state.messages_rag = []
+if "vector_db_options" not in st.session_state:
+    st.session_state.vector_db_options = [f.stem for f in Path(VECTOR_DB_FOLDER).glob("*.faiss")]    
+    st.session_state.vector_db_options.append("Carregar Novo Documento")
+
+st.set_page_config(page_icon="💬", 
+                   page_title="GPTzzz...",
+                   layout= "wide"
+                   )
+
+with st.sidebar:
+    st.header("🧠 CloneGPTzzz")    
+    st.markdown("#### Desenvolvido por Carlos E. V. Neves")
+    st.markdown("""
+    ## Apresentação:
+                
+    - O app foi desenvolvido para fins didáticos...
+    - O app faz ...
+    - Os modelos disponíveis são...
+    """)
+    st.markdown("## Opções para chat:")
+    backend_option = model_opts_backend()
+    model_option = model_opts_component(backend_option)
+    if st.button("Limpar Conversa", icon="🗑️"):
+        st.session_state.messages = []
         
-    # Button to process and generate answers
-    if st.button("Enviar") and question and selected_vector_db != "Carregar Novo Documento":
-        with st.spinner("Respondendo sua questão..."):
-            
-            # Build retriever from the selected vector store
-            retriever = vector_store.as_retriever(search_type="mmr", search_kwargs={'k': 5}) # type: ignore
-
-            # Build and run the RAG chain
-            rag_chain = build_rag_chain(retriever, model_option)
-
-            # Create a placeholder for streaming response
-            response_placeholder = st.empty()  # Create an empty placeholder for the answer
-
-            # Stream the response as it is generated
-            response = ""
-            for chunk in rag_chain.stream(question):
-                response += chunk  # Append each chunk of the response
-                response_placeholder.markdown(response.replace('$', '\\$').replace('<think>', ':green[\\<pensando\\>]\n').replace('</think>', ':green[\\</pensando\\>]\n'))  # Update the placeholder with the new response
-
-            st.session_state['chat_history_rag'].append({"user": question, "assistant": response})
+    st.divider()
+    st.session_state.show_rag_opts = st.checkbox(":book: Conversar com a base de dados vetorial (RAG)", 
+                                                 value=False)
     
-    st.write("## Histórico das converas")
-    with st.expander("Expandir"):
-        for chat in reversed(st.session_state['chat_history_rag']):
-            st.write(f"**🧑 Usuário**: {chat['user']}")
-            st.write(f"**:robot_face: Assistente**: {chat['assistant']}")
-            st.write("---")
+    if st.session_state.show_rag_opts:
+
+        st.markdown("## Opções para RAG:")
+    
+        #embedding_option = model_opts_embedding()
+        embedding_option = EmbeddingType.OllamaEmbeddings.name
+        st.session_state.embedding_option = embedding_option
+        # Dropdown to select vector DB or upload a new document
+        vector_db_options = st.session_state.vector_db_options
+        
+        selected_vector_db = st.selectbox("Selecione Documento para RAG ou Carregue Novo Documento", vector_db_options, index=0)
+        st.session_state.selected_vector_db = selected_vector_db
+        
+        if selected_vector_db != "Carregar Novo Documento":
+            check_display_pdf = st.checkbox("Visualizar Documento Selecionado", value=False)
+            st.session_state.display_pdf = check_display_pdf
+
+tab_gpt_like, = st.tabs(["🤖 :book: Chat"])
+
+with tab_gpt_like:
+    
+    if st.session_state.display_pdf:    
+        col1, col2 = st.columns([6, 4])
+    else: 
+        # Create two columns with different ratios
+        col1, col2 = st.columns([9, 1])
+
+    # Accept user input
+    prompt = st.chat_input("Olá! Como posso ajudar você hoje?")
+
+    with col1:
+        with st.container(height=550, border=False, key="chat_container"):
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+                        
+            with st.spinner("Gerando resposta..."):
+                if prompt:
+                    # Display user message in chat message container
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+
+                    # Display assistant response in chat message container
+                    with st.chat_message("assistant"):
+                        
+                        if not st.session_state.show_rag_opts:
+                            stream = generate_response(prompt)
+                            response = st.write_stream(parse_stream(stream))
+                            st.session_state.messages.append({"role": "assistant", "content": response})
+                        else:
+                            selected_vector_db = st.session_state.selected_vector_db
+                            embedding_option = st.session_state.embedding_option
+                                                            
+                            vector_store = process_rag(selected_vector_db, embedding_option)
+                            
+                            retriever: VectorStoreRetriever = vector_store.as_retriever(search_type="mmr", search_kwargs={'k': 5}) # type: ignore
+
+                            # Build and run the RAG chain
+                            rag_chain = build_rag_chain(retriever, model_option)
+                            # Create a placeholder for streaming response
+                            response_placeholder = st.empty()  # Create an empty placeholder for the answer
+
+                            # Stream the response as it is generated
+                            response = ""
+                            for chunk in rag_chain.stream(prompt):
+                                response += chunk  # Append each chunk of the response
+                                response_placeholder.markdown(response.replace('$', '\\$')
+                                                .replace('<think>', '\n:brain:\n\n:green[\\<pensando\\>]\n')
+                                                .replace('</think>', '\n\n:green[\\</pensando\\>]\n\n---')
+                                                )
+                            st.session_state.messages.append({"role": "assistant", "content": response})
+    
+    if st.session_state.show_rag_opts: 
+        selected_vector_db = st.session_state.selected_vector_db
+        
+        with st.sidebar:
+            vector_store = process_rag(selected_vector_db, st.session_state.embedding_option)
+    
+        if st.session_state.display_pdf and selected_vector_db != "Carregar Novo Documento":     
+            with col2:
+                filename = f"{selected_vector_db}.pdf"
+                filepath = f"vector_db/{filename}"
+
+                st.write(f"Documento selecionado: **{filename}**")
+                display_pdf_panel(filepath)
