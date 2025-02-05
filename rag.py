@@ -8,13 +8,21 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+
 import faiss
 
+from utils import ModelType
+from utils import PROMPT_BR, PROMPT
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Ensure the vector_db folder exists
 VECTOR_DB_FOLDER = "vector_db"
 os.makedirs(VECTOR_DB_FOLDER, exist_ok=True)
-
 
 # Load and convert PDF to markdown content
 def load_and_convert_document(file_path):
@@ -51,24 +59,41 @@ def create_or_load_vector_store(filename, chunks, embeddings):
 
 
 # Build RAG chain
-def build_rag_chain(retriever):
-    prompt = """
-        You are an assistant for analysis of of Administrative Council for Economic Defense'(CADE) guidelines. Those documents establish directives 
-        on issues related to competition policy or institutional procedures and provide explanations of the existing legislation. 
-        Use the retrieved context to answer questions in brazilian portuguese. 
-        If you don't know the answer, say so. 
+def build_rag_chain(retriever, model_option):
+ 
+
+    prompt = PROMPT
+    # Handle different model backends
+    if model_option in (ModelType.Deepseek_r1_8b_Distill_Llama.name, 
+                       ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name, 
+                       ModelType.Mistral_7b.name):
+        # Ollama backend
+        llm = ChatOllama(
+            model = str(ModelType[model_option].value),
+            base_url="http://localhost:11434"
+        )
         
-        Question: {question}
-        Context: {context}
-        Answer:
-    """
+    elif model_option == ModelType.MaritacaAI.name:
+        prompt = PROMPT_BR
+        
+        # MaritacaAI backend
+        llm = ChatOpenAI(
+            api_key=os.environ['MARITACA_API_KEY'], # type: ignore
+            base_url="https://chat.maritaca.ai/api",
+            model = str(ModelType.MaritacaAI.value)
+        )
+    else:
+        # Groq backend
+        llm = ChatGroq(
+            #api_key= os.environ['GROQ_API_KEY'], # type: ignore
+            model = str(ModelType[model_option].value) 
+        )
+
     prompt_template = ChatPromptTemplate.from_template(prompt)
-    # change models here
-    model = ChatOllama(model="deepseek-r1:1.5b", base_url="http://localhost:11434")
     return (
         {"context": retriever | (lambda docs: "\n\n".join(doc.page_content for doc in docs)), 
-         "question": RunnablePassthrough()}
+        "question": RunnablePassthrough()}
         | prompt_template
-        | model
+        | llm 
         | StrOutputParser()
-    )
+    ) 

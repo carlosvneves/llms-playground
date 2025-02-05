@@ -5,12 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12.8"
 dependencies = [
+    "deepinfra>=0.1.0",
     "docling>=2.18.0",
     "faiss-gpu-cu12>=1.10.0",
     "groq>=0.17.0",
     "langchain>=0.3.17",
     "langchain-community>=0.3.16",
+    "langchain-groq>=0.2.4",
+    "langchain-mistralai>=0.2.6",
     "langchain-ollama>=0.2.3",
+    "langchain-openai>=0.3.3",
     "openai>=1.61.0",
     "pdf2image>=1.17.0",
     "python-dotenv>=1.0.1",

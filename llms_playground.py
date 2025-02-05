@@ -1,3 +1,4 @@
+from langchain_mistralai import MistralAIEmbeddings
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 from groq import Groq
@@ -7,42 +8,24 @@ from dotenv import load_dotenv
 import os
 import re
 from typing import Generator
-from enum import Enum
-
-# imports for HF embed
-from transformers import AutoTokenizer, AutoModel
-import torch
-import torch.nn.functional as F 
-
-
 # imports for RAG
 from pathlib import Path
+
 from rag import load_and_convert_document, get_markdown_splits, create_or_load_vector_store, build_rag_chain
 from langchain_ollama import OllamaEmbeddings
 from langchain_community.vectorstores import FAISS
 from pdf2image import convert_from_path, exceptions
 from PIL import Image
 
+from utils import ModelType, BackendType, EmbeddingType
+
+
 load_dotenv()
+
 
 # Path to vector DB folder
 VECTOR_DB_FOLDER = "vector_db"
 os.makedirs(VECTOR_DB_FOLDER, exist_ok=True)
-
-
-class ModelType(Enum):
-    MaritacaAI = "sabiazinho-3"
-    Deepseek_r1_1dot5b_Distill_Qwen = "deepseek-r1:1.5b"
-    Deepseek_r1_8b_Distill_Llama = "deepseek-r1:8b"
-    Mistral_7b = "mistral:latest"
-    Deepseek_r1_70b_Distill_Llama = "deepseek-r1-distill-llama-70b"
-    Llama_3dot3_70b_versatile = "llama-3.3-70b-versatile"
-
-class BackendType(Enum):
-    LocalOllama = "ollama"
-    OnlineGroq = "groq"
-    OnlineMaritacaAI = "maritaca"
-
     
 def generate_chat_stream(chat_completion) -> Generator[str, None, None]:
     """Yield chat response content from the Groq API response."""
@@ -115,7 +98,16 @@ def model_opts_backend():
         
     )
     return backend_option
-
+def model_opts_embedding():
+    embedding_option = st.selectbox(
+        "Selecione o embedding",
+        (EmbeddingType.OllamaEmbeddings.name,
+         EmbeddingType.MistralEmbeddings.name),  
+        index=0
+    )
+    return embedding_option
+    
+    
 def write_simple_response(text):
     
     st.markdown("""
@@ -165,17 +157,19 @@ st.set_page_config(page_icon="💬",
                    page_title="Chat...",
                    layout= "centered"
                    )
-st.title("🧠 LLMs Playground")
+st.title("🧠 Exemplos de Aplicações de LLMs")
+
+backend_option = model_opts_backend()
+model_option = model_opts_component(backend_option)
+
+st.divider()
 
 tab_simple_chatbot, tab_chat_rag = st.tabs(["🤖 Chatbot Simples", "🤖 :book: Chatbot com RAG"])
 
+st.session_state.display_pdf_sidebar = False
+
 with tab_simple_chatbot:
     
-    backend_option = model_opts_backend()
-    model_option = model_opts_component(backend_option)
-    
-
-
     with st.form("llm-form"):
         text = st.text_area("Em que posso ajudar?", placeholder="Qual era a capital do Brasil em 1921?")
         submit = st.form_submit_button("Enviar")
@@ -237,6 +231,7 @@ with tab_simple_chatbot:
 
     if submit and text:
         with st.spinner("Gerando resposta..."):
+            
             if model_option == ModelType.MaritacaAI.name:
                 response = generate_response(text)
                 st.session_state['chat_history'].append({"user": text, "assistant": response})
@@ -245,10 +240,13 @@ with tab_simple_chatbot:
             elif backend_option == BackendType.OnlineGroq.name:
 
                 if model_option == ModelType.Deepseek_r1_70b_Distill_Llama.name:
-                    response = generate_response(text).choices[0].message.content
+                    response = generate_response(text)
+
+                    response = response.choices[0].message.content # type: ignore
                     write_thought_response(response) 
                 else:    
-                    response = generate_chat_stream(generate_response(text))
+                    response = generate_response(text)
+                    response = generate_chat_stream(response)
                     write_simple_response(response)
 
                 st.session_state['chat_history'].append({"user": text, "assistant": response})
@@ -270,10 +268,14 @@ with tab_simple_chatbot:
             st.write("---")
 
 with tab_chat_rag:
+    embedding_option = model_opts_embedding()
     # Dropdown to select vector DB or upload a new document
     vector_db_options = [f.stem for f in Path(VECTOR_DB_FOLDER).glob("*.faiss")]
     vector_db_options.append("Carregar Novo Documento")  # Add option to upload a new document
     selected_vector_db = st.selectbox("Selecione a Base Vetorial ou Carregue Novo Documento", vector_db_options, index=0)
+    
+    check_display_pdf = st.checkbox("Mostrar PDF na barra lateral", value=False)
+    st.session_state.display_pdf_sidebar = check_display_pdf
 
     # If 'Upload New Document' is selected, show the file uploader
     if selected_vector_db == "Carregar Novo Documento":
@@ -304,7 +306,14 @@ with tab_chat_rag:
                     chunks = get_markdown_splits(markdown_content)
 
                     # Initialize embeddings
-                    embeddings = OllamaEmbeddings(model='nomic-embed-text', base_url="http://localhost:11434")
+                    if embedding_option == EmbeddingType.MistralEmbeddings.name:
+                        embeddings = MistralAIEmbeddings(                    
+                            model=EmbeddingType.MistralEmbeddings.value
+                        )
+                    else:    
+                        embeddings = OllamaEmbeddings(
+                            model=EmbeddingType.OllamaEmbeddings.value, 
+                            base_url="http://localhost:11434")
 
                     # Create or load vector DB and store PDF along with it
                     vector_store = create_or_load_vector_store(uploaded_file.name.split(".")[0], chunks, embeddings)
@@ -318,23 +327,35 @@ with tab_chat_rag:
                     with open(pdf_path, "wb") as f:
                         f.write(document_binary)
 
-                    st.success("PDF processed and stored in the vector database.")
+                    st.success("PDF processado e armazenado no banco de dados vetorial.")
 
                     # Clean up the temporary file
                     Path(temp_path).unlink()
 
-    elif selected_vector_db != "Upload New Document":
+    elif selected_vector_db != "Carregar Novo Documento":
         # Load the selected vector DB
         vector_db_path = Path(VECTOR_DB_FOLDER) / f"{selected_vector_db}.faiss"
         if vector_db_path.exists():
-            embeddings = OllamaEmbeddings(model='nomic-embed-text', base_url="http://localhost:11434")
+
+
+            # Initialize embeddings
+            if embedding_option == EmbeddingType.MistralEmbeddings.name:
+                embeddings = MistralAIEmbeddings(                    
+                    model=EmbeddingType.MistralEmbeddings.value
+                )
+            else:    
+                embeddings = OllamaEmbeddings(
+                    model=EmbeddingType.OllamaEmbeddings.value, 
+                    base_url="http://localhost:11434")
+            
             vector_store = FAISS.load_local(str(vector_db_path), embeddings=embeddings, allow_dangerous_deserialization=True)
 
             # Display PDF in the sidebar
             pdf_path = Path(VECTOR_DB_FOLDER) / f"{selected_vector_db}.pdf"
             if pdf_path.exists():
-                display_pdf_in_sidebar(pdf_path, selected_vector_db)
-                #display_pdf_panel(selected_vector_db)
+                if st.session_state.display_pdf_sidebar:                
+                    display_pdf_in_sidebar(pdf_path, selected_vector_db)
+                    #display_pdf_panel(selected_vector_db)
             else:
                 st.sidebar.warning("Arquivo PDF não encontrado na Base Vetorial selecionada.")
         else:
@@ -342,16 +363,19 @@ with tab_chat_rag:
 
     # Question input section
     question = st.text_input("Entre sua pergunta:", placeholder="por exemplo, O que é o cartel em licitação de acordo com a  Lei de Concorrência?")
-
+    
+    if "chat_history_rag" not in st.session_state:
+        st.session_state['chat_history_rag'] = []
+        
     # Button to process and generate answers
-    if st.button("Submit Question") and question and selected_vector_db != "Upload New Document":
+    if st.button("Enviar") and question and selected_vector_db != "Carregar Novo Documento":
         with st.spinner("Respondendo sua questão..."):
             
             # Build retriever from the selected vector store
             retriever = vector_store.as_retriever(search_type="mmr", search_kwargs={'k': 5}) # type: ignore
 
             # Build and run the RAG chain
-            rag_chain = build_rag_chain(retriever)
+            rag_chain = build_rag_chain(retriever, model_option)
 
             # Create a placeholder for streaming response
             response_placeholder = st.empty()  # Create an empty placeholder for the answer
@@ -360,4 +384,13 @@ with tab_chat_rag:
             response = ""
             for chunk in rag_chain.stream(question):
                 response += chunk  # Append each chunk of the response
-                response_placeholder.markdown(response.replace('$', '\\$'))  # Update the placeholder with the new response
+                response_placeholder.markdown(response.replace('$', '\\$').replace('<think>', ':green[\\<pensando\\>]\n').replace('</think>', ':green[\\</pensando\\>]\n'))  # Update the placeholder with the new response
+
+            st.session_state['chat_history_rag'].append({"user": question, "assistant": response})
+    
+    st.write("## Histórico das converas")
+    with st.expander("Expandir"):
+        for chat in reversed(st.session_state['chat_history_rag']):
+            st.write(f"**🧑 Usuário**: {chat['user']}")
+            st.write(f"**:robot_face: Assistente**: {chat['assistant']}")
+            st.write("---")
