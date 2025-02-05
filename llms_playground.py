@@ -1,13 +1,13 @@
 from langchain_mistralai import MistralAIEmbeddings
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
-from groq import Groq
+from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
-import openai
+from langchain_groq import ChatGroq
+from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
+from langchain.schema import SystemMessage, HumanMessage
 from dotenv import load_dotenv
 import os
-import re
-from typing import Generator
 # imports for RAG
 from pathlib import Path
 
@@ -27,12 +27,6 @@ load_dotenv()
 VECTOR_DB_FOLDER = "vector_db"
 os.makedirs(VECTOR_DB_FOLDER, exist_ok=True)
     
-def generate_chat_stream(chat_completion) -> Generator[str, None, None]:
-    """Yield chat response content from the Groq API response."""
-    for chunk in chat_completion:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
-
 # Function to display PDF content as images in the sidebar
 def display_pdf_in_sidebar(pdf_path, file_name):
     try:
@@ -106,134 +100,66 @@ def model_opts_embedding():
         index=0
     )
     return embedding_option
-    
-    
-def write_simple_response(text):
-    
-    st.markdown("""
-    :robot_face: ...resposta:
-
-    """)
-
-    if type(text) is str:
-        st.write(text)
-    else:
-        st.write_stream(text)
-
-def write_thought_response(text):
-
-    with st.spinner("Pensando..."):
-        match = re.search(r"<think>(.*?)</think>\s*", text, flags=re.DOTALL)
-
-        if match:
-            think = "\n" + match.group(1).strip() + "\n"  # Store the content inside <think> in a variable
-            remaining_text = text[match.end():].strip()  # Store the rest of the text
-        else:
-            think = ""
-            remaining_text = "\n" + text + "\n" 
-
-    st.markdown(f"""
-    :brain: ...pensamento:
-
-    {think}                              
-    
-    """)
-    
-    st.divider()
-
-    st.markdown(f"""
-
-    :robot_face: ...resposta: 
-
-    {remaining_text}
-    
-    """)
 
 def generate_response(input_text):
-    if model_option == ModelType.MaritacaAI.name:
-        client = openai.OpenAI(
-        api_key=os.environ['MARITACA_API_KEY'],
-        base_url="https://chat.maritaca.ai/api",
-        )
-        response = client.chat.completions.create(
-        model=ModelType.MaritacaAI.value,
-        messages=[
-            {"role": "user", "content": input_text},
-        ] ,
-            max_tokens=1000,
-            stream=True,
-        
-        )
-        return response 
-    else:
-        if backend_option == BackendType.OnlineGroq.name:
-            client = Groq(
-                api_key=os.environ.get("GROQ_API_KEY"),
-            )
-            if model_option == ModelType.Deepseek_r1_70b_Distill_Llama.name:
-                model = ModelType.Deepseek_r1_70b_Distill_Llama.value
-                stream = False 
-            else:
-                model = ModelType.Llama_3dot3_70b_versatile.value
-                stream = True
-            response = client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user","content": input_text,
-
-                    }
-                ],
-                max_tokens=1000,
-                stream=stream,
-                model=model,
-            )
-            return response
-        else:
-            base_url = "http://localhost:11434/"
-            if model_option == ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name:
-                model = ChatOllama(model=ModelType.Deepseek_r1_1dot5b_Distill_Qwen.value, base_url=base_url)
-            elif model_option == ModelType.Deepseek_r1_8b_Distill_Llama.name: 
-                model = ChatOllama(model=ModelType.Deepseek_r1_8b_Distill_Llama.value, base_url=base_url)
-            else:
-                model = ChatOllama(model=ModelType.Mistral_7b.value, base_url=base_url)
-
-            response = model.invoke(input_text)
-
-        return response.content
-
-def display_chat_response(text, model_option, backend_option):
     
-    if model_option == ModelType.MaritacaAI.name:
-        response = generate_response(text)
-        st.session_state['chat_history'].append({"user": text, "assistant": response})
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        write_simple_response(response) 
+    # Define the system and human message templates
+    system_template = """
+    You are a helpful AI assistant. 
+    
+    Your responses should be:
+    - Clear and concise
+    - Accurate and well-researched
+    - Professional in tone
+    - Helpful and solution-oriented
+    
+    Additional notes:
+    - Use emojis.
+    - You can think in english, but always show your chain of thoughts in brazilian portuguese.
+    - Always answer in brazilian portuguese.
+    """
+    
+    human_template = "{input_text}"
+    
+    # Create the chat prompt template
+    chat_prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=system_template),
+        HumanMessagePromptTemplate.from_template(human_template)
+    ])
+    
+    # Format the messages with the input text
+    messages = chat_prompt.format_messages(input_text=input_text)
+    
 
+    if backend_option == BackendType.OnlineMaritacaAI.name:
+        model = ChatOpenAI(
+            api_key=os.environ['MARITACA_API_KEY'], # type: ignore
+            base_url="https://chat.maritaca.ai/api",
+            model = str(ModelType.MaritacaAI.value)
+        )
+    
     elif backend_option == BackendType.OnlineGroq.name:
-
-        if model_option == ModelType.Deepseek_r1_70b_Distill_Llama.name:
-            response = generate_response(text)
-
-            response = response.choices[0].message.content # type: ignore
-            write_thought_response(response) 
-        else:    
-            response = generate_response(text)
-            response = generate_chat_stream(response)
-            write_simple_response(response)
-
-        st.session_state['chat_history'].append({"user": text, "assistant": response})
-        st.session_state.messages.append({"role": "assistant", "content": response})
-
+        model =ChatGroq(
+            #api_key=os.environ['GROQ_API_KEY'],
+            model = str(ModelType[model_option].value)
+        ) 
     else:
-        response = generate_response(text)
-        
-        st.session_state['chat_history'].append({"user": text, "assistant": response})
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        base_url = "http://localhost:11434/"
+        model = ChatOllama(model=ModelType[model_option].value, 
+                            base_url=base_url,
+                            num_thread=8)
+            
+    response = model.stream(messages)
 
-        if model_option in (ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name, ModelType.Deepseek_r1_8b_Distill_Llama.name):
-            write_thought_response(response)
-        else:
-            write_simple_response(response)
+    return response
+def parse_stream(stream):
+    for chunk in stream:
+        yield (chunk.content.
+                replace('$', '\\$').
+                replace('<think>', '\n:brain:\n\n:green[\\<pensando\\>]\n').
+                replace('</think>', '\n\n:green[\\</pensando\\>]\n\n---')
+                )
+        
 
 # ----------------------------------------------------------------------------------------------------------------------------
 # Streamlit app
@@ -260,13 +186,9 @@ with st.sidebar:
         
     st.divider()
 
-tab_gpt_like, tab_simple_chatbot, tab_chat_rag = st.tabs(["🤖 Clone GPT","🤖 Chatbot Simples", "🤖 :book: Chatbot com RAG"])
+tab_gpt_like, tab_chat_rag = st.tabs(["🤖 Clone GPT","🤖 :book: Chatbot com RAG"])
 
 st.session_state.display_pdf_sidebar = False
-
-
-if "chat_history" not in st.session_state:
-    st.session_state['chat_history'] = []
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -295,30 +217,12 @@ with tab_gpt_like:
 
                     # Display assistant response in chat message container
                     with st.chat_message("assistant"):
-                        #display_chat_response(prompt, model_option, backend_option)
+
                         stream = generate_response(prompt)
-                        response = st.write_stream(stream)
+                        response = st.write_stream(parse_stream(stream))
+                        
                     
                     st.session_state.messages.append({"role": "assistant", "content": response})
-                        
-
-with tab_simple_chatbot:
-    
-    with st.form("llm-form"):
-        text = st.text_area("Olá!Como posso ajudar você hoje?", placeholder="Qual era a capital do Brasil em 1921?")
-        submit = st.form_submit_button("Enviar")
-
-    if submit and text:
-        with st.spinner("Gerando resposta..."):
-            display_chat_response(text, model_option, backend_option)
-            
-
-    st.write("## Histórico das converas")
-    with st.expander("Expandir"):
-        for chat in reversed(st.session_state['chat_history']):
-            st.write(f"**🧑 Usuário**: {chat['user']}")
-            st.write(f"**:robot_face: Assistente**: {chat['assistant']}")
-            st.write("---")
 
 with tab_chat_rag:
     embedding_option = model_opts_embedding()
