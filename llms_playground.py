@@ -81,7 +81,7 @@ def model_opts_component(backend_option):
         opts = (ModelType.MaritacaAI.name)
     
     model_option = st.selectbox(
-        "Selecione o modelo",
+        "Selecione o modelo :bulb:",
         opts,
         index=0
     )
@@ -90,7 +90,7 @@ def model_opts_component(backend_option):
 def model_opts_backend():
     # pull down menu to select the model
     backend_option = st.selectbox(
-        "Selecione o backend",
+        "Selecione o backend :rocket:",
         (BackendType.LocalOllama.name,
          BackendType.OnlineMaritacaAI.name,
          BackendType.OnlineGroq.name),  
@@ -149,6 +149,91 @@ def write_thought_response(text):
     
     """)
 
+def generate_response(input_text):
+    if model_option == ModelType.MaritacaAI.name:
+        client = openai.OpenAI(
+        api_key=os.environ['MARITACA_API_KEY'],
+        base_url="https://chat.maritaca.ai/api",
+        )
+        response = client.chat.completions.create(
+        model=ModelType.MaritacaAI.value,
+        messages=[
+            {"role": "user", "content": input_text},
+        ] ,
+            max_tokens=1000,
+            stream=True,
+        
+        )
+        return response 
+    else:
+        if backend_option == BackendType.OnlineGroq.name:
+            client = Groq(
+                api_key=os.environ.get("GROQ_API_KEY"),
+            )
+            if model_option == ModelType.Deepseek_r1_70b_Distill_Llama.name:
+                model = ModelType.Deepseek_r1_70b_Distill_Llama.value
+                stream = False 
+            else:
+                model = ModelType.Llama_3dot3_70b_versatile.value
+                stream = True
+            response = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user","content": input_text,
+
+                    }
+                ],
+                max_tokens=1000,
+                stream=stream,
+                model=model,
+            )
+            return response
+        else:
+            base_url = "http://localhost:11434/"
+            if model_option == ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name:
+                model = ChatOllama(model=ModelType.Deepseek_r1_1dot5b_Distill_Qwen.value, base_url=base_url)
+            elif model_option == ModelType.Deepseek_r1_8b_Distill_Llama.name: 
+                model = ChatOllama(model=ModelType.Deepseek_r1_8b_Distill_Llama.value, base_url=base_url)
+            else:
+                model = ChatOllama(model=ModelType.Mistral_7b.value, base_url=base_url)
+
+            response = model.invoke(input_text)
+
+        return response.content
+
+def display_chat_response(text, model_option, backend_option):
+    
+    if model_option == ModelType.MaritacaAI.name:
+        response = generate_response(text)
+        st.session_state['chat_history'].append({"user": text, "assistant": response})
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        write_simple_response(response) 
+
+    elif backend_option == BackendType.OnlineGroq.name:
+
+        if model_option == ModelType.Deepseek_r1_70b_Distill_Llama.name:
+            response = generate_response(text)
+
+            response = response.choices[0].message.content # type: ignore
+            write_thought_response(response) 
+        else:    
+            response = generate_response(text)
+            response = generate_chat_stream(response)
+            write_simple_response(response)
+
+        st.session_state['chat_history'].append({"user": text, "assistant": response})
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+    else:
+        response = generate_response(text)
+        
+        st.session_state['chat_history'].append({"user": text, "assistant": response})
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+        if model_option in (ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name, ModelType.Deepseek_r1_8b_Distill_Llama.name):
+            write_thought_response(response)
+        else:
+            write_simple_response(response)
 
 # ----------------------------------------------------------------------------------------------------------------------------
 # Streamlit app
@@ -157,108 +242,76 @@ st.set_page_config(page_icon="💬",
                    page_title="Chat...",
                    layout= "centered"
                    )
-st.title("🧠 Exemplos de Aplicações de LLMs")
 
-backend_option = model_opts_backend()
-model_option = model_opts_component(backend_option)
+with st.sidebar:
+    st.header("🧠 Exemplos de Aplicações de LLMs")    
+    st.markdown("""
+    ## Apresentação:
+                
+    - O app foi desenvolvido para fins didáticos...
+    - O app faz ...
+    - Os modelos disponíveis são...
+    """)
+    st.markdown("## Opções:")
+    backend_option = model_opts_backend()
+    model_option = model_opts_component(backend_option)
+    if st.button("Limpar Conversa", icon="🗑️"):
+        st.session_state.messages = []
+        
+    st.divider()
 
-st.divider()
-
-tab_simple_chatbot, tab_chat_rag = st.tabs(["🤖 Chatbot Simples", "🤖 :book: Chatbot com RAG"])
+tab_gpt_like, tab_simple_chatbot, tab_chat_rag = st.tabs(["🤖 Clone GPT","🤖 Chatbot Simples", "🤖 :book: Chatbot com RAG"])
 
 st.session_state.display_pdf_sidebar = False
+
+
+if "chat_history" not in st.session_state:
+    st.session_state['chat_history'] = []
+
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+with tab_gpt_like:
+    
+    # Create two columns with different ratios
+    col1, col2 = st.columns([9, 1])
+    
+    # Accept user input
+    prompt = st.chat_input("Olá! Como posso ajudar você hoje?")
+
+    with col1:
+        with st.container(height=500, border=False):
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+                        
+            with st.spinner("Gerando resposta..."):
+                if prompt:
+                    # Display user message in chat message container
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+
+                    # Display assistant response in chat message container
+                    with st.chat_message("assistant"):
+                        #display_chat_response(prompt, model_option, backend_option)
+                        stream = generate_response(prompt)
+                        response = st.write_stream(stream)
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                        
 
 with tab_simple_chatbot:
     
     with st.form("llm-form"):
-        text = st.text_area("Em que posso ajudar?", placeholder="Qual era a capital do Brasil em 1921?")
+        text = st.text_area("Olá!Como posso ajudar você hoje?", placeholder="Qual era a capital do Brasil em 1921?")
         submit = st.form_submit_button("Enviar")
-
-    def generate_response(input_text):
-        if model_option == ModelType.MaritacaAI.name:
-            client = openai.OpenAI(
-            api_key=os.environ['MARITACA_API_KEY'],
-            base_url="https://chat.maritaca.ai/api",
-            )
-            response = client.chat.completions.create(
-            model=ModelType.MaritacaAI.value,
-            messages=[
-                {"role": "user", "content": input_text},
-            ] ,
-                max_tokens=1000,
-                stream=True,
-            
-            )
-            return response 
-        else:
-            if backend_option == BackendType.OnlineGroq.name:
-                client = Groq(
-                    api_key=os.environ.get("GROQ_API_KEY"),
-                )
-                if model_option == ModelType.Deepseek_r1_70b_Distill_Llama.name:
-                    model = ModelType.Deepseek_r1_70b_Distill_Llama.value
-                    stream = False 
-                else:
-                    model = ModelType.Llama_3dot3_70b_versatile.value
-                    stream = True
-                response = client.chat.completions.create(
-                    messages=[
-                        {
-                            "role": "user","content": input_text,
-
-                        }
-                    ],
-                    max_tokens=1000,
-                    stream=stream,
-                    model=model,
-                )
-                return response
-            else:
-                base_url = "http://localhost:11434/"
-                if model_option == ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name:
-                    model = ChatOllama(model=ModelType.Deepseek_r1_1dot5b_Distill_Qwen.value, base_url=base_url)
-                elif model_option == ModelType.Deepseek_r1_8b_Distill_Llama.name: 
-                    model = ChatOllama(model=ModelType.Deepseek_r1_8b_Distill_Llama.value, base_url=base_url)
-                else:
-                    model = ChatOllama(model=ModelType.Mistral_7b.value, base_url=base_url)
-
-                response = model.invoke(input_text)
-
-            return response.content
-
-    if "chat_history" not in st.session_state:
-        st.session_state['chat_history'] = []
 
     if submit and text:
         with st.spinner("Gerando resposta..."):
+            display_chat_response(text, model_option, backend_option)
             
-            if model_option == ModelType.MaritacaAI.name:
-                response = generate_response(text)
-                st.session_state['chat_history'].append({"user": text, "assistant": response})
-                write_simple_response(response) 
-
-            elif backend_option == BackendType.OnlineGroq.name:
-
-                if model_option == ModelType.Deepseek_r1_70b_Distill_Llama.name:
-                    response = generate_response(text)
-
-                    response = response.choices[0].message.content # type: ignore
-                    write_thought_response(response) 
-                else:    
-                    response = generate_response(text)
-                    response = generate_chat_stream(response)
-                    write_simple_response(response)
-
-                st.session_state['chat_history'].append({"user": text, "assistant": response})
-            else:
-                response = generate_response(text)
-                
-                st.session_state['chat_history'].append({"user": text, "assistant": response})
-
-                if model_option in (ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name, ModelType.Deepseek_r1_8b_Distill_Llama.name):
-                    write_thought_response(response)
-                else:
-                    write_simple_response(response)
 
     st.write("## Histórico das converas")
     with st.expander("Expandir"):
