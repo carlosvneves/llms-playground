@@ -10,6 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 import faiss
 
@@ -82,6 +83,11 @@ def build_rag_chain(retriever, model_option):
             base_url="https://chat.maritaca.ai/api",
             model = str(ModelType.MaritacaAI.value)
         )
+    elif model_option == ModelType.Gemini_2dot0_flash_lite.name:
+        llm = ChatGoogleGenerativeAI(
+            model = str(ModelType[model_option].value)
+        )
+        print("google")
     else:
         # Groq backend
         llm = ChatGroq(

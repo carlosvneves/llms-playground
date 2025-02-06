@@ -1,5 +1,3 @@
-from re import M
-import select
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_mistralai import MistralAIEmbeddings
 import streamlit as st
@@ -7,8 +5,9 @@ from streamlit_pdf_viewer import pdf_viewer
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
-from langchain.schema import SystemMessage, HumanMessage
+from langchain.schema import SystemMessage
 from dotenv import load_dotenv
 import os
 # imports for RAG
@@ -21,7 +20,7 @@ from pdf2image import convert_from_path, exceptions
 from PIL import Image
 
 from utils import ModelType, BackendType, EmbeddingType
-
+from utils import SYSTEM_TEMPLATE, SYSTEM_TEMPLATE_BR
 
 load_dotenv()
 
@@ -74,6 +73,8 @@ def model_opts_component(backend_option):
     elif backend_option == BackendType.OnlineGroq.name:
         opts = (ModelType.Deepseek_r1_70b_Distill_Llama.name,
                 ModelType.Llama_3dot3_70b_versatile.name)
+    elif backend_option == BackendType.OnlineGoogle.name:
+        opts = (ModelType.Gemini_2dot0_flash_lite.name)
     else:
         opts = (ModelType.MaritacaAI.name)
     
@@ -90,7 +91,8 @@ def model_opts_backend():
         "Selecione o backend :rocket:",
         (BackendType.LocalOllama.name,
          BackendType.OnlineMaritacaAI.name,
-         BackendType.OnlineGroq.name),  
+         BackendType.OnlineGroq.name,
+         BackendType.OnlineGoogle.name),  
         index=0
         
     )
@@ -106,22 +108,14 @@ def model_opts_embedding():
 
 def generate_response(input_text):
     
+    
+    
+    if backend_option == BackendType.OnlineMaritacaAI.name:
+        system_template = SYSTEM_TEMPLATE_BR
+    else:
+        system_template = SYSTEM_TEMPLATE
+
     # Define the system and human message templates
-    system_template = """
-    You are a helpful AI assistant. 
-    
-    Your responses should be:
-    - Clear and concise
-    - Accurate and well-researched
-    - Professional in tone
-    - Helpful and solution-oriented
-    
-    Additional notes:
-    - Use emojis.
-    - You can think in english, but always show your chain of thoughts in brazilian portuguese.
-    - Always answer in brazilian portuguese.
-    """
-    
     human_template = "{input_text}"
     
     # Create the chat prompt template
@@ -146,6 +140,10 @@ def generate_response(input_text):
             #api_key=os.environ['GROQ_API_KEY'],
             model = str(ModelType[model_option].value)
         ) 
+    elif backend_option == BackendType.OnlineGoogle.name:
+        model = ChatGoogleGenerativeAI(
+            model = str(ModelType[model_option].value)
+        )
     else:
         base_url = "http://localhost:11434/"
         model = ChatOllama(model=ModelType[model_option].value, 

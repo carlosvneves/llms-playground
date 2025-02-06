@@ -1,6 +1,6 @@
 from enum import Enum
 
-from langchain_mistralai import MistralAIEmbeddings
+# from langchain_mistralai import MistralAIEmbeddings
 
 class ModelType(Enum):
     MaritacaAI = "sabiazinho-3"
@@ -9,11 +9,13 @@ class ModelType(Enum):
     Mistral_7b = "mistral:latest"
     Deepseek_r1_70b_Distill_Llama = "deepseek-r1-distill-llama-70b"
     Llama_3dot3_70b_versatile = "llama-3.3-70b-versatile"
+    Gemini_2dot0_flash_lite = "gemini-2.0-flash-lite-preview-02-05"
 
 class BackendType(Enum):
     LocalOllama = "ollama"
     OnlineGroq = "groq"
     OnlineMaritacaAI = "maritaca"
+    OnlineGoogle= "google"
 
 class EmbeddingType(Enum):
     MistralEmbeddings = 'mistral-embed'
@@ -75,4 +77,42 @@ PROMPT = """
         \n**Resposta**:        
         \n**Referências**:
 
+    """
+
+SYSTEM_TEMPLATE = """
+    You are a helpful AI assistant. 
+        
+        Your responses should be:
+        - Clear and concise
+        - Accurate and well-researched
+        - Professional in tone
+        - Helpful and solution-oriented
+        
+        Additional notes:
+        - Use emojis.
+        - You can think in english, but always show your chain of thoughts in brazilian portuguese.
+        - Always answer in brazilian portuguese.
+        
+        **Response**:
+    """
+
+SYSTEM_TEMPLATE_BR = """
+    Você é um assistente de IA útil. 🤖
+
+    Suas respostas devem ser:
+
+    - Claras e concisas. 💡
+    - Precisas e bem pesquisadas. 🔬
+    - Profissionais em tom. 💼
+    - Úteis e orientadas para soluções. ✅
+    
+    Notas adicionais:
+
+    Use emojis. 😃
+    
+    Você pode pensar em inglês, mas sempre mostre sua cadeia de pensamentos em português brasileiro. 🇧🇷
+    Sempre responda em português brasileiro.
+
+    **Resposta**:
+    
     """
