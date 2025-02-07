@@ -1,5 +1,5 @@
 from langchain_core.vectorstores.base import VectorStoreRetriever
-from langchain_mistralai import MistralAIEmbeddings
+from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 from langchain_openai import ChatOpenAI
@@ -75,6 +75,10 @@ def model_opts_component(backend_option):
                 ModelType.Llama_3dot3_70b_versatile.name)
     elif backend_option == BackendType.OnlineGoogle.name:
         opts = (ModelType.Gemini_2dot0_flash_lite.name)
+    elif backend_option == BackendType.OnlineMistral.name:
+        opts = (
+                ModelType.Mistral_small.name,
+                ModelType.Mistral_large.name)
     else:
         opts = (ModelType.MaritacaAI.name)
     
@@ -92,7 +96,8 @@ def model_opts_backend():
         (BackendType.LocalOllama.name,
          BackendType.OnlineMaritacaAI.name,
          BackendType.OnlineGroq.name,
-         BackendType.OnlineGoogle.name),  
+         BackendType.OnlineGoogle.name,
+         BackendType.OnlineMistral.name),  
         index=0
         
     )
@@ -143,6 +148,10 @@ def generate_response(input_text):
     elif backend_option == BackendType.OnlineGoogle.name:
         model = ChatGoogleGenerativeAI(
             model = str(ModelType[model_option].value)
+        )
+    elif backend_option == BackendType.OnlineMistral:
+        model = ChatMistralAI(
+            model_name = str(ModelType[model_option].value)
         )
     else:
         base_url = "http://localhost:11434/"

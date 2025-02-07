@@ -2,6 +2,7 @@ from enum import Enum
 
 # from langchain_mistralai import MistralAIEmbeddings
 
+    
 class ModelType(Enum):
     MaritacaAI = "sabiazinho-3"
     Deepseek_r1_1dot5b_Distill_Qwen = "deepseek-r1:1.5b"
@@ -10,12 +11,17 @@ class ModelType(Enum):
     Deepseek_r1_70b_Distill_Llama = "deepseek-r1-distill-llama-70b"
     Llama_3dot3_70b_versatile = "llama-3.3-70b-versatile"
     Gemini_2dot0_flash_lite = "gemini-2.0-flash-lite-preview-02-05"
+    Gemini_2dot0_pro = "gemini-2.0-pro-exp-02-05"
+    Mistral_small = "mistral-small-2501"
+    Mistral_large = "mistral-large-2411"
 
 class BackendType(Enum):
     LocalOllama = "ollama"
     OnlineGroq = "groq"
     OnlineMaritacaAI = "maritaca"
     OnlineGoogle= "google"
+    OnlineMistral = "mistral"
+
 
 class EmbeddingType(Enum):
     MistralEmbeddings = 'mistral-embed'
