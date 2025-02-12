@@ -1,13 +1,13 @@
 from langchain_core.vectorstores.base import VectorStoreRetriever
-from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
+# from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
-from langchain_openai import ChatOpenAI
-from langchain_ollama import ChatOllama
-from langchain_groq import ChatGroq
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
-from langchain.schema import SystemMessage
+# from langchain_openai import ChatOpenAI
+# from langchain_ollama import ChatOllama
+# from langchain_groq import ChatGroq
+# from langchain_google_genai import ChatGoogleGenerativeAI
+# from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
+# from langchain.schema import SystemMessage
 from dotenv import load_dotenv
 import os
 # imports for RAG
@@ -20,7 +20,8 @@ from pdf2image import convert_from_path, exceptions
 from PIL import Image
 
 from utils import ModelType, BackendType, EmbeddingType
-from utils import SYSTEM_TEMPLATE, SYSTEM_TEMPLATE_BR
+# from utils import SYSTEM_TEMPLATE, SYSTEM_TEMPLATE_BR
+from utils import Chatbot, parse_stream
 
 load_dotenv()
 
@@ -69,18 +70,23 @@ def model_opts_component(backend_option):
     if backend_option == BackendType.LocalOllama.name:
         opts = (ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name,
                 ModelType.Deepseek_r1_8b_Distill_Llama.name,
-                ModelType.Mistral_7b.name)
+                ModelType.Mistral_7b.name,
+                ModelType.Phi4_14b.name,
+                ModelType.Gemma2_9b.name,
+                ModelType.TinyLlama_r1_limo.name)
     elif backend_option == BackendType.OnlineGroq.name:
         opts = (ModelType.Deepseek_r1_70b_Distill_Llama.name,
                 ModelType.Llama_3dot3_70b_versatile.name)
     elif backend_option == BackendType.OnlineGoogle.name:
-        opts = (ModelType.Gemini_2dot0_flash_lite.name)
+        opts = (ModelType.Gemini_2dot0_flash_lite.name, 
+                ModelType.Gemini_2dot0_pro.name)
     elif backend_option == BackendType.OnlineMistral.name:
         opts = (
                 ModelType.Mistral_small.name,
-                ModelType.Mistral_large.name)
+                ModelType.Mistral_nemo.name)
     else:
-        opts = (ModelType.MaritacaAI.name)
+        opts = (ModelType.Sabia3_small.name, 
+                ModelType.Sabia3_large.name)
     
     model_option = st.selectbox(
         "Selecione o modelo :bulb:",
@@ -111,64 +117,62 @@ def model_opts_embedding():
     )
     return embedding_option
 
-def generate_response(input_text):
-    
-    
-    
-    if backend_option == BackendType.OnlineMaritacaAI.name:
-        system_template = SYSTEM_TEMPLATE_BR
-    else:
-        system_template = SYSTEM_TEMPLATE
-
-    # Define the system and human message templates
-    human_template = "{input_text}"
-    
-    # Create the chat prompt template
-    chat_prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=system_template),
-        HumanMessagePromptTemplate.from_template(human_template)
-    ])
-    
-    # Format the messages with the input text
-    messages = chat_prompt.format_messages(input_text=input_text)
-    
-
-    if backend_option == BackendType.OnlineMaritacaAI.name:
-        model = ChatOpenAI(
-            api_key=os.environ['MARITACA_API_KEY'], # type: ignore
-            base_url="https://chat.maritaca.ai/api",
-            model = str(ModelType.MaritacaAI.value)
-        )
-    
-    elif backend_option == BackendType.OnlineGroq.name:
-        model =ChatGroq(
-            #api_key=os.environ['GROQ_API_KEY'],
-            model = str(ModelType[model_option].value)
-        ) 
-    elif backend_option == BackendType.OnlineGoogle.name:
-        model = ChatGoogleGenerativeAI(
-            model = str(ModelType[model_option].value)
-        )
-    elif backend_option == BackendType.OnlineMistral:
-        model = ChatMistralAI(
-            model_name = str(ModelType[model_option].value)
-        )
-    else:
-        base_url = "http://localhost:11434/"
-        model = ChatOllama(model=ModelType[model_option].value, 
-                            base_url=base_url,
-                            num_thread=8)
-            
-    response = model.stream(messages)
-
-    return response
-def parse_stream(stream):
-    for chunk in stream:
-        yield (chunk.content.
-                replace('$', '\\$').
-                replace('<think>', '\n:brain:\n\n:green[\\<pensando\\>]\n').
-                replace('</think>', '\n\n:green[\\</pensando\\>]\n\n---')
-                )
+# def generate_response(input_text):
+#     
+#     if backend_option == BackendType.OnlineMaritacaAI.name:
+#         system_template = SYSTEM_TEMPLATE_BR
+#     else:
+#         system_template = SYSTEM_TEMPLATE
+#
+#     # Define the system and human message templates
+#     human_template = "{input_text}"
+#     
+#     # Create the chat prompt template
+#     chat_prompt = ChatPromptTemplate.from_messages([
+#         SystemMessage(content=system_template),
+#         HumanMessagePromptTemplate.from_template(human_template)
+#     ])
+#     
+#     # Format the messages with the input text
+#     messages = chat_prompt.format_messages(input_text=input_text)
+#     
+#
+#     if backend_option == BackendType.OnlineMaritacaAI.name:
+#         model = ChatOpenAI(
+#             api_key=os.environ['MARITACA_API_KEY'], # type: ignore
+#             base_url="https://chat.maritaca.ai/api",
+#             model = str(ModelType.MaritacaAI.value)
+#         )
+#     
+#     elif backend_option == BackendType.OnlineGroq.name:
+#         model =ChatGroq(
+#             #api_key=os.environ['GROQ_API_KEY'],
+#             model = str(ModelType[model_option].value)
+#         ) 
+#     elif backend_option == BackendType.OnlineGoogle.name:
+#         model = ChatGoogleGenerativeAI(
+#             model = str(ModelType[model_option].value)
+#         )
+#     elif backend_option == BackendType.OnlineMistral:
+#         model = ChatMistralAI(
+#             model_name = str(ModelType[model_option].value)
+#         )
+#     else:
+#         base_url = "http://localhost:11434/"
+#         model = ChatOllama(model=ModelType[model_option].value, 
+#                             base_url=base_url,
+#                             num_thread=8)
+#             
+#     response = model.stream(messages)
+#
+#     return response
+# def parse_stream(stream):
+#     for chunk in stream:
+#         yield (chunk.content.
+#                 replace('$', '\\$').
+#                 replace('<think>', '\n:brain:\n\n:green[\\<pensando\\>]\n').
+#                 replace('</think>', '\n\n:green[\\</pensando\\>]\n\n---')
+#                 )
 
 def process_rag(selected_vector_db, embedding_option):
 
@@ -280,12 +284,12 @@ if "vector_db_options" not in st.session_state:
     st.session_state.vector_db_options.append("Carregar Novo Documento")
 
 st.set_page_config(page_icon="💬", 
-                   page_title="GPTzzz...",
+                   page_title="Synapsis...",
                    layout= "wide"
                    )
 
 with st.sidebar:
-    st.header("🧠 CloneGPTzzz")    
+    st.header("🧠 SinapsisChat")    
     st.markdown("#### Desenvolvido por Carlos E. V. Neves")
     st.markdown("""
     ## Apresentação:
@@ -351,7 +355,10 @@ with tab_gpt_like:
                     with st.chat_message("assistant"):
                         
                         if not st.session_state.show_rag_opts:
-                            stream = generate_response(prompt)
+                            
+                            model = Chatbot(backend_option, model_option)
+                            stream = model.generate_response(prompt)
+                            print(stream)
                             response = st.write_stream(parse_stream(stream))
                             st.session_state.messages.append({"role": "assistant", "content": response})
                         else:
@@ -363,7 +370,7 @@ with tab_gpt_like:
                             retriever: VectorStoreRetriever = vector_store.as_retriever(search_type="mmr", search_kwargs={'k': 5}) # type: ignore
 
                             # Build and run the RAG chain
-                            rag_chain = build_rag_chain(retriever, model_option)
+                            rag_chain = build_rag_chain(retriever,backend_option, model_option)
                             # Create a placeholder for streaming response
                             response_placeholder = st.empty()  # Create an empty placeholder for the answer
 

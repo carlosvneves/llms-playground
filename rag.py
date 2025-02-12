@@ -7,16 +7,12 @@ from docling.document_converter import DocumentConverter
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
-from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
-from langchain_mistralai import ChatMistralAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 import faiss
 
-from utils import ModelType
+from utils import BackendType
 from utils import PROMPT_BR, PROMPT
+from utils import Chatbot
 
 from dotenv import load_dotenv
 
@@ -61,44 +57,16 @@ def create_or_load_vector_store(filename, chunks, embeddings):
 
 
 # Build RAG chain
-def build_rag_chain(retriever, model_option):
+def build_rag_chain(retriever, backend_option, model_option):
  
 
-    prompt = PROMPT
-    # Handle different model backends
-    if model_option in (ModelType.Deepseek_r1_8b_Distill_Llama.name, 
-                       ModelType.Deepseek_r1_1dot5b_Distill_Qwen.name, 
-                       ModelType.Mistral_7b.name):
-        # Ollama backend
-        llm = ChatOllama(
-            model = str(ModelType[model_option].value),
-            base_url="http://localhost:11434"
-        )
-        
-    elif model_option == ModelType.MaritacaAI.name:
+    model = Chatbot(backend_option, model_option)
+    llm = model.llm
+    
+    if backend_option == BackendType.OnlineMaritacaAI.name:
         prompt = PROMPT_BR
-        
-        # MaritacaAI backend
-        llm = ChatOpenAI(
-            api_key=os.environ['MARITACA_API_KEY'], # type: ignore
-            base_url="https://chat.maritaca.ai/api",
-            model = str(ModelType.MaritacaAI.value)
-        )
-    elif model_option in (ModelType.Gemini_2dot0_flash_lite.name, 
-                          ModelType.Gemini_2dot0_pro.name):
-        llm = ChatGoogleGenerativeAI(
-            model = str(ModelType[model_option].value)
-        )
-    elif model_option in (ModelType.Mistral_large.name, ModelType.Mistral_small.name):
-        llm = ChatMistralAI(
-            model_name = str(ModelType[model_option].value)
-        )
     else:
-        # Groq backend
-        llm = ChatGroq(
-            #api_key= os.environ['GROQ_API_KEY'], # type: ignore
-            model = str(ModelType[model_option].value) 
-        )
+        prompt = PROMPT
 
     prompt_template = ChatPromptTemplate.from_template(prompt)
     return (

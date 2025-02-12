@@ -1,10 +1,18 @@
+from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
+from langchain_mistralai import ChatMistralAI
+from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
+from langchain.schema import SystemMessage
+import os 
+
+
 from enum import Enum
 
-# from langchain_mistralai import MistralAIEmbeddings
-
-    
 class ModelType(Enum):
-    MaritacaAI = "sabiazinho-3"
+    Sabia3_small = "sabiazinho-3"
+    Sabia3_large = "sabia-3"
     Deepseek_r1_1dot5b_Distill_Qwen = "deepseek-r1:1.5b"
     Deepseek_r1_8b_Distill_Llama = "deepseek-r1:8b"
     Mistral_7b = "mistral:latest"
@@ -12,8 +20,12 @@ class ModelType(Enum):
     Llama_3dot3_70b_versatile = "llama-3.3-70b-versatile"
     Gemini_2dot0_flash_lite = "gemini-2.0-flash-lite-preview-02-05"
     Gemini_2dot0_pro = "gemini-2.0-pro-exp-02-05"
-    Mistral_small = "mistral-small-2501"
-    Mistral_large = "mistral-large-2411"
+    Gemini_2dot0_flash_thinking = "gemini-2.0-flash-thinking-exp-01-21"
+    Mistral_small = "mistral-small-latest"
+    Mistral_nemo = "open-mistral-nemo"
+    Gemma2_9b = "gemma2"
+    Phi4_14b = "phi4"
+    TinyLlama_r1_limo = "hf.co/mradermacher/TinyLlama-R1-LIMO-GGUF:F16"
 
 class BackendType(Enum):
     LocalOllama = "ollama"
@@ -22,13 +34,118 @@ class BackendType(Enum):
     OnlineGoogle= "google"
     OnlineMistral = "mistral"
 
-
 class EmbeddingType(Enum):
     MistralEmbeddings = 'mistral-embed'
     OllamaEmbeddings = 'nomic-embed-text'
 
+class Chatbot:
+
+    
+    def __init__(self, backend_option, model_option, max_tokens=512, max_retries=3, temperature=0.8):
+        self.backend_option = backend_option 
+        self.model_option = model_option 
+        self.max_tokens = max_tokens
+        self.max_retries = max_retries
+        self.temperature = temperature
+        # self.llm:ChatOpenAI|ChatGroq|ChatOllama|ChatGoogleGenerativeAI|ChatMistralAI = None
+
+        backend_option = self.backend_option
+        model_option = self.model_option
+
+
+        try:
+            match(BackendType[backend_option]):
+
+                case BackendType.LocalOllama:
+                    model = ChatOllama(
+                        base_url="http://localhost:11434/",
+                        model=str(ModelType[model_option].value),
+                        temperature=self.temperature,
+                        num_thread=8,
+                        top_p=1
+                    )
+                case BackendType.OnlineGroq:
+                    model =ChatGroq(
+                        model = str(ModelType[model_option].value),
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        max_retries=self.max_retries,
+                        n=1,
+                    )
+                case BackendType.OnlineMaritacaAI:
+                    model = ChatOpenAI(
+                        api_key=os.environ['MARITACA_API_KEY'], # type: ignore
+                        base_url="https://chat.maritaca.ai/api",
+                        model = str(ModelType[model_option].value),
+                        max_completion_tokens=self.max_tokens,
+                        max_retries=self.max_retries,
+                        temperature=self.temperature,
+                        n=1,
+                        top_p=1
+                    )
+                case BackendType.OnlineGoogle:
+                    model = ChatGoogleGenerativeAI(
+                        model = str(ModelType[model_option].value),
+                        max_retries=self.max_retries,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        top_p=1,
+                        n=1,
+                    )
+                case BackendType.OnlineMistral:
+                    model = ChatMistralAI(
+                        model_name = str(ModelType[model_option].value),
+                        max_retries=self.max_retries,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        top_p=1,
+                    )
+
+            self.llm = model
+
+            print(self.llm)
+
+        except Exception as e:
+            print(f"Error: {str(e)}")
+
+
+
+    def generate_response(self, context):
+        response = None 
+        model = self.llm 
+
+        if self.backend_option == BackendType.OnlineMaritacaAI.name:
+            system_template = SYSTEM_TEMPLATE_BR
+        else:
+            system_template = SYSTEM_TEMPLATE
+
+        # Define the system and human message templates
+        human_template = "{input_text}"
+        
+        # Create the chat prompt template
+        chat_prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content=system_template),
+            HumanMessagePromptTemplate.from_template(human_template)
+        ])
+        
+        # Format the messages with the input text
+        messages = chat_prompt.format_messages(input_text=context)
+
+        response = model.stream(messages)
+
+        return response
+
+
+def parse_stream(stream):
+    for chunk in stream:
+        yield (chunk.content.
+                replace('$', '\\$').
+                replace('<think>', '\n:brain:\n\n:green[\\<pensando\\>]\n').
+                replace('</think>', '\n\n:green[\\</pensando\\>]\n\n---')
+                )
+
 PROMPT_BR = """
-            Você é um assistente especializado na análise das diretrizes do Conselho Administrativo de Defesa Econômica (CADE).
+            Persona: Você é um Advogado especializado em Direito da Concorrência e Análise Econômica do Direito, com proundo conhecimento das normas, guias e decisões do Conselho Administrativo de Defesa Econômica (CADE).
 
             Contexto: Os documentos em questão estabelecem orientações e diretrizes relativas à política de concorrência, aos procedimentos institucionais e contêm explicações detalhadas sobre a legislação vigente.
 
@@ -49,15 +166,18 @@ PROMPT_BR = """
 
             \n**Pergunta**: 
             {question}
+            
             \n**Contexto**: 
             {context}
+            
             \n**Resposta**:
+
             \n**Referências**:
         
         """
 
 PROMPT = """
-        You are an assistant specialized in the analysis of the guidelines issued by the Administrative Council for Economic Defense (CADE).
+        Persona: You are an specialized layer in Antitrust Law and Economic analysis, with profound knowledge of the guidelines and decisions issued by the Administrative Council for Economic Defense (CADE).
 
         Context: The documents in question establish guidelines and directives related to competition policy, institutional procedures, and contain detailed explanations regarding the current legislation.
 
@@ -96,7 +216,6 @@ SYSTEM_TEMPLATE = """
         
         Additional notes:
         - Use emojis.
-        - You can think in english, but always show your chain of thoughts in brazilian portuguese.
         - Always answer in brazilian portuguese.
         
         **Response**:
@@ -116,7 +235,6 @@ SYSTEM_TEMPLATE_BR = """
 
     Use emojis. 😃
     
-    Você pode pensar em inglês, mas sempre mostre sua cadeia de pensamentos em português brasileiro. 🇧🇷
     Sempre responda em português brasileiro.
 
     **Resposta**:
