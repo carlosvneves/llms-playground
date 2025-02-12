@@ -145,7 +145,7 @@ def process_rag(selected_vector_db, embedding_option):
                         # Initialize embeddings
                         if embedding_option == EmbeddingType.MistralEmbeddings.name:
                             embeddings = MistralAIEmbeddings(                    
-                                model=EmbeddingType.MistralEmbeddings.value
+                                model=EmbeddingType.MistralEmbeddings.value,
                                 wait_time=60,
                                 max_concurrent_requests=32,
                             )
