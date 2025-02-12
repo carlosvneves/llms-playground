@@ -1,26 +1,18 @@
 from langchain_core.vectorstores.base import VectorStoreRetriever
-# from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
-# from langchain_openai import ChatOpenAI
-# from langchain_ollama import ChatOllama
-# from langchain_groq import ChatGroq
-# from langchain_google_genai import ChatGoogleGenerativeAI
-# from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
-# from langchain.schema import SystemMessage
 from dotenv import load_dotenv
 import os
-# imports for RAG
 from pathlib import Path
 
 from rag import load_and_convert_document, get_markdown_splits, create_or_load_vector_store, build_rag_chain
 from langchain_ollama import OllamaEmbeddings
+from langchain_mistralai import MistralAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from pdf2image import convert_from_path, exceptions
 from PIL import Image
 
 from utils import ModelType, BackendType, EmbeddingType
-# from utils import SYSTEM_TEMPLATE, SYSTEM_TEMPLATE_BR
 from utils import Chatbot, parse_stream
 
 load_dotenv()
@@ -117,63 +109,6 @@ def model_opts_embedding():
     )
     return embedding_option
 
-# def generate_response(input_text):
-#     
-#     if backend_option == BackendType.OnlineMaritacaAI.name:
-#         system_template = SYSTEM_TEMPLATE_BR
-#     else:
-#         system_template = SYSTEM_TEMPLATE
-#
-#     # Define the system and human message templates
-#     human_template = "{input_text}"
-#     
-#     # Create the chat prompt template
-#     chat_prompt = ChatPromptTemplate.from_messages([
-#         SystemMessage(content=system_template),
-#         HumanMessagePromptTemplate.from_template(human_template)
-#     ])
-#     
-#     # Format the messages with the input text
-#     messages = chat_prompt.format_messages(input_text=input_text)
-#     
-#
-#     if backend_option == BackendType.OnlineMaritacaAI.name:
-#         model = ChatOpenAI(
-#             api_key=os.environ['MARITACA_API_KEY'], # type: ignore
-#             base_url="https://chat.maritaca.ai/api",
-#             model = str(ModelType.MaritacaAI.value)
-#         )
-#     
-#     elif backend_option == BackendType.OnlineGroq.name:
-#         model =ChatGroq(
-#             #api_key=os.environ['GROQ_API_KEY'],
-#             model = str(ModelType[model_option].value)
-#         ) 
-#     elif backend_option == BackendType.OnlineGoogle.name:
-#         model = ChatGoogleGenerativeAI(
-#             model = str(ModelType[model_option].value)
-#         )
-#     elif backend_option == BackendType.OnlineMistral:
-#         model = ChatMistralAI(
-#             model_name = str(ModelType[model_option].value)
-#         )
-#     else:
-#         base_url = "http://localhost:11434/"
-#         model = ChatOllama(model=ModelType[model_option].value, 
-#                             base_url=base_url,
-#                             num_thread=8)
-#             
-#     response = model.stream(messages)
-#
-#     return response
-# def parse_stream(stream):
-#     for chunk in stream:
-#         yield (chunk.content.
-#                 replace('$', '\\$').
-#                 replace('<think>', '\n:brain:\n\n:green[\\<pensando\\>]\n').
-#                 replace('</think>', '\n\n:green[\\</pensando\\>]\n\n---')
-#                 )
-
 def process_rag(selected_vector_db, embedding_option):
 
     vector_store = None
@@ -211,6 +146,8 @@ def process_rag(selected_vector_db, embedding_option):
                         if embedding_option == EmbeddingType.MistralEmbeddings.name:
                             embeddings = MistralAIEmbeddings(                    
                                 model=EmbeddingType.MistralEmbeddings.value
+                                wait_time=60,
+                                max_concurrent_requests=32,
                             )
                         else:    
                             embeddings = OllamaEmbeddings(
