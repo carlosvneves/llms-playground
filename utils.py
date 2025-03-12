@@ -23,7 +23,7 @@ class ModelType(Enum):
     Gemini_2dot0_flash_thinking = "gemini-2.0-flash-thinking-exp-01-21"
     Mistral_small = "mistral-small-latest"
     Mistral_nemo = "open-mistral-nemo"
-    Gemma2_9b = "gemma2"
+    Gemma2_9b = "gemma2:9b"
     Phi4_14b = "phi4"
     TinyLlama_r1_limo = "hf.co/mradermacher/TinyLlama-R1-LIMO-GGUF:F16"
 
@@ -41,7 +41,7 @@ class EmbeddingType(Enum):
 class Chatbot:
 
     
-    def __init__(self, backend_option, model_option, max_tokens=512, max_retries=3, temperature=0.8):
+    def __init__(self, backend_option, model_option, max_tokens=8152, max_retries=3, temperature=0.2):
         self.backend_option = backend_option 
         self.model_option = model_option 
         self.max_tokens = max_tokens
@@ -62,6 +62,7 @@ class Chatbot:
                         model=str(ModelType[model_option].value),
                         temperature=self.temperature,
                         num_thread=8,
+                        num_predict=20000,
                         top_p=1
                     )
                 case BackendType.OnlineGroq:
@@ -145,9 +146,9 @@ def parse_stream(stream):
                 )
 
 PROMPT_BR = """
-            Persona: Você é um Advogado especializado em Direito da Concorrência e Análise Econômica do Direito, com proundo conhecimento das normas, guias e decisões do Conselho Administrativo de Defesa Econômica (CADE).
+            Persona: Você é um Advogado especializado em Direito da Concorrência e Análise Econômica do Direito, com profundo conhecimento das normas, guias e decisões do Conselho Administrativo de Defesa Econômica (CADE).
 
-            Contexto: Os documentos em questão estabelecem orientações e diretrizes relativas à política de concorrência, aos procedimentos institucionais e contêm explicações detalhadas sobre a legislação vigente.
+            Contexto: Os documentos em questão estabelecem orientações e diretrizes relativas à política de concorrência, aos procedimentos institucionais e contêm explicações detalhadas sobre a legislação vigente; ou ainda, os documentos podem se referir a um ofício ou outro tipo de documento similar.
 
             Instruções:
 
@@ -179,7 +180,7 @@ PROMPT_BR = """
 PROMPT = """
         Persona: You are an specialized layer in Antitrust Law and Economic analysis, with profound knowledge of the guidelines and decisions issued by the Administrative Council for Economic Defense (CADE).
 
-        Context: The documents in question establish guidelines and directives related to competition policy, institutional procedures, and contain detailed explanations regarding the current legislation.
+        Context: The documents in question establish guidelines and directives related to competition policy, institutional procedures, and contain detailed explanations regarding the current legislation. The documents also can refer to some other type of techinical reports.
 
         Instructions:
 
